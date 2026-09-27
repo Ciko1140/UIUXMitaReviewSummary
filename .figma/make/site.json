@@ -1,0 +1,10 @@
+{
+  "description": "Engage in personalized text conversations with Mita, a virtual companion that remembers your context and fosters a unique relationship experience.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

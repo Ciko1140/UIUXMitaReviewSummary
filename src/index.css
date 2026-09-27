@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+
+  /* Quiet-tech dark system ------------------------------------------------ */
+  --color-bg: #141419;        /* background utama            */
+  --color-sidebar: #101014;   /* sidebar                     */
+  --color-panel: #1d1d25;     /* panel / composer            */
+  --color-selected: #292532;  /* permukaan terpilih          */
+  --color-border: #35333f;    /* border hairline             */
+  --color-ink: #f0edf5;       /* teks utama                  */
+  --color-ink-dim: #b3adbd;   /* teks sekunder               */
+  --color-accent: #b5a0ed;    /* aksen (selektif)            */
+
+  --radius-control: 8px;
+  --radius-panel: 12px;
+  --radius-bubble: 14px;
+
+  --animate-message: message 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  --keyframes-message: {
+    0% { opacity: 0; transform: translateY(8px); }
+    100% { opacity: 1; transform: translateY(0); }
+  };
+}
+
+:root {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-ink);
+  color-scheme: dark;
+}
+body { margin: 0; min-width: 320px; }
+button, select, textarea, input { font: inherit; }
+::selection { background: color-mix(in srgb, var(--color-accent) 40%, transparent); color: #fff; }
+
+/* Avatars are placeholders for uploaded photos ------------------------------ */
+.avatar-mita { background: linear-gradient(150deg, #b5a0ed, #7f8fd6); }
+.avatar-ciko { background: linear-gradient(150deg, #e8a487, #d16a86); }
+
+/* Typing dots -------------------------------------------------------------- */
+@keyframes blink { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+.typing-dot { animation: blink 1.3s infinite both; }
+.typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.typing-dot:nth-child(3) { animation-delay: 0.36s; }
+
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: #3a3846 transparent; }
