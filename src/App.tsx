@@ -9,11 +9,7 @@ import { FormEvent, useEffect, useRef, useState } from "react"
 type NavItem = "Chat" | "Memory" | "Test Mode" | "Settings"
 type CikoStatus = "sent" | "sending" | "failed"
 type MitaStatus = "waiting" | "streaming" | "done" | "stopped" | "failed"
-type Message = { from: "ciko" text: string status: CikoStatus } | {
-  from: "mita"
-  text: string
-  status: MitaStatus
-}
+type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }
 
 /* ---- Ikon: satu keluarga stroke konsisten (lucide-style) ---------------- */
 function Icon({
@@ -159,7 +155,7 @@ function Icon({
   }
 }
 
-const navItems: { label: NavItem icon: string }[] = [
+const navItems: { label: NavItem; icon: string }[] = [
   { label: "Chat", icon: "chat" },
   { label: "Memory", icon: "memory" },
   { label: "Test Mode", icon: "test" },
@@ -177,26 +173,68 @@ const REPLIES = [
 
 const DAILY: Message[] = [
   {
+    id: "m1",
     from: "mita",
     text: "eh kamu jadi begadang lagi ya semalem",
     status: "done",
   },
   {
+    id: "m2",
     from: "ciko",
     text: "ketahuan hehe. tadi keasyikan ngoprek layout kita",
     status: "sent",
   },
   {
+    id: "m3",
     from: "mita",
     text: "pantesan. tapi seneng liat kamu serius. cuma jangan lupa istirahat ya, nanti aku yang repot ngingetin terus.",
     status: "done",
   },
-  { from: "ciko", text: "iya iya, bos.", status: "sent" },
-  { from: "mita", text: "bukan bos, pacar.", status: "done" },
+  { id: "m4", from: "ciko", text: "iya iya, bos.", status: "sent" },
+  { id: "m5", from: "mita", text: "bukan bos, pacar.", status: "done" },
+]
+
+
+type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
+type MemoryItem = {
+  id: string
+  category: MemoryCategory
+  content: string
+  source: "Dari Ciko" | "Observasi Sementara" | "Roleplay"
+  sourceMsg?: string
+  date: string
+  status?: "pending" | "done" | "no-followup"
+}
+
+const MOCK_MEMORIES: MemoryItem[] = [
+  {
+    id: "mem1",
+    category: "Tentang Ciko",
+    content: "Sering begadang ngoprek layout",
+    source: "Dari Ciko",
+    sourceMsg: "tadi keasyikan ngoprek layout kita",
+    date: "Baru saja",
+  },
+  {
+    id: "mem2",
+    category: "Tentang Ciko",
+    content: "Besok ada ujian",
+    source: "Dari Ciko",
+    sourceMsg: "besok aku ada ujian pagi",
+    date: "Kemarin",
+  },
+  {
+    id: "mem3",
+    category: "Topik Belum Selesai",
+    content: "Tanya gimana hasil ujiannya",
+    source: "Observasi Sementara",
+    date: "Kemarin",
+    status: "pending"
+  },
 ]
 
 /* ---- Personalisasi tampilan --------------------------------------------- */
-type Crop = { zoom: number x: number y: number }
+type Crop = { zoom: number; x: number; y: number }
 type Appearance = {
   bg: string | null
   dim: number
@@ -236,17 +274,11 @@ function loadAppearance(): Appearance {
   }
 }
 function persistAppearance(a: Appearance) {
-  // blob: URL (gambar dari komputer) tidak valid setelah reload → simpan null.
-  const clean = {
-    ...a,
-    bg: a.bg?.startsWith("blob:") ? null : a.bg,
-    mita: a.mita?.startsWith("blob:") ? null : a.mita,
-    ciko: a.ciko?.startsWith("blob:") ? null : a.ciko,
-  }
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(clean))
-  } catch {
-    /* abaikan — prototipe */
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(a))
+    return true
+  } catch (err) {
+    return false
   }
 }
 
@@ -267,15 +299,19 @@ function Avatar({
     const c = crop ?? DEFAULT_CROP
     return (
       <span
-        className="inline-block shrink-0 rounded-full bg-center bg-no-repeat"
-        style={{
-          width: size,
-          height: size,
-          backgroundImage: `url(${photo})`,
-          backgroundSize: `${c.zoom * 100}%`,
-          backgroundPosition: `${c.x}% ${c.y}%`,
-        }}
-      />
+        className="inline-block shrink-0 overflow-hidden rounded-full"
+        style={{ width: size, height: size }}
+      >
+        <img
+          src={photo}
+          alt=""
+          className="h-full w-full object-cover"
+          style={{
+            objectPosition: `${c.x}% ${c.y}%`,
+            transform: `scale(${c.zoom})`,
+          }}
+        />
+      </span>
     )
   }
   return (
@@ -297,6 +333,13 @@ export default function App() {
   const [modelOpen, setModelOpen] = useState(false)
   const [modelNote, setModelNote] = useState(false)
   const [draft, setDraft] = useState("")
+
+  const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
+  const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
+  const [selMem, setSelMem] = useState<MemoryItem | null>(null)
+  const [editMem, setEditMem] = useState<MemoryItem | null>(null)
+  const [editReason, setEditReason] = useState("Memperbaiki informasi yang salah")
+
 
   // Chat pertama (kosong) benar-benar terpisah dari chat harian (contoh).
   const [chatMode, setChatMode] = useState<"harian" | "pertama">("harian")
@@ -428,13 +471,29 @@ export default function App() {
     e?.preventDefault()
     if (!draft.trim() || responding) return
     const mitaIndex = messages.length + 1
+    const id1 = Date.now().toString()
+    const id2 = (Date.now() + 1).toString()
     setMessages((m) => [
       ...m,
-      { from: "ciko", text: draft.trim(), status: "sent" },
-      { from: "mita", text: "", status: "waiting" },
+      { id: id1, from: "ciko", text: draft.trim(), status: "sent" },
+      { id: id2, from: "mita", text: "", status: "waiting" },
     ])
     setDraft("")
     beginResponse(setMessages, mitaIndex, nextBehavior)
+  }
+
+  
+  function toggleIgnore(index: number) {
+    setMessages(m => m.map((msg, k) => {
+      if (k === index) {
+        return { ...msg, ignored: !msg.ignored }
+      }
+      return msg;
+    }))
+    // Simulasi menghapus memory jika ciko bilang besok ujian dll
+    if (index === 1) { // just a mock logic for demo
+       setMemories(m => m.filter(x => x.id !== 'mem1'))
+    }
   }
 
   /* ---- Kontrol demo: kondisi percakapan --------------------------------- */
@@ -442,14 +501,17 @@ export default function App() {
     clearTimers()
     const mitaIndex = messages.length + 1
     const reply = nextReply()
+    const id1 = Date.now().toString()
+    const id2 = (Date.now() + 1).toString()
     setMessages((m) => [
       ...m,
       {
+        id: id1,
         from: "ciko",
         text: "boleh cerita satu hal random soal kamu?",
         status: "sent",
       },
-      { from: "mita", text: "", status: "waiting" },
+      { id: id2, from: "mita", text: "", status: "waiting" },
     ])
     if (kind === "waiting") return // biarkan menunggu; reviewer bisa Stop
     if (kind === "streaming") {
@@ -478,7 +540,7 @@ export default function App() {
   function addFailedCiko() {
     setMessages((m) => [
       ...m,
-      { from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
+      { id: Date.now().toString(), from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
     ])
   }
   function resetDemo() {
@@ -512,7 +574,10 @@ export default function App() {
   }
   function applyAppearance() {
     setApplied(editing)
-    persistAppearance(editing)
+    const success = persistAppearance(editing)
+    if (!success) {
+      alert("Gambar terlalu besar untuk disimpan secara permanen di browser prototipe ini. Tampilan hanya bertahan selama sesi ini.")
+    }
     setAppearanceOpen(false)
   }
   function resetAppearancePreview() {
@@ -524,7 +589,13 @@ export default function App() {
     input.accept = "image/*"
     input.onchange = () => {
       const f = input.files?.[0]
-      if (f) cb(URL.createObjectURL(f))
+      if (f) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          if (e.target?.result) cb(e.target.result as string)
+        }
+        reader.readAsDataURL(f)
+      }
     }
     input.click()
   }
@@ -603,7 +674,7 @@ export default function App() {
             size={28}
           />
           <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">
+            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">
               {msg.text}
               {msg.status === "streaming" && (
                 <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-0.5 animate-pulse bg-[var(--color-accent)]" />
@@ -623,7 +694,7 @@ export default function App() {
       <div key={index} className="flex items-end justify-end gap-2.5">
         <div className="flex max-w-[74%] flex-col items-end">
           <div
-            className={`animate-message w-fit px-4 py-3 text-[16px] leading-6 ${
+            className={`animate-message w-fit whitespace-pre-wrap break-words px-4 py-3 text-[16px] leading-6 ${
               msg.status === "failed"
                 ? "rounded-[14px_4px_14px_14px] border border-[#7a4a52] bg-[#2a2230] text-[var(--color-ink)]"
                 : "rounded-[14px_4px_14px_14px] bg-[var(--color-selected)] text-[var(--color-ink)]"
