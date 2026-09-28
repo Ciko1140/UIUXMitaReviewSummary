@@ -2,13 +2,50 @@ import fs from 'fs';
 
 let content = fs.readFileSync('src/App.tsx', 'utf-8');
 
-// 1. Update Message type with id and ignored
-content = content.replace(
-  'type Message =\n  | { from: "ciko"; text: string; status: CikoStatus }\n  | { from: "mita"; text: string; status: MitaStatus }',
-  'type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }'
-);
+// 1. ADD MEMORY TYPES at top
+const memoryTypes = `type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
+type MemoryItem = {
+  id: string
+  category: MemoryCategory
+  content: string
+  source: "Dari Ciko" | "Observasi Sementara" | "Roleplay"
+  sourceMsg?: string
+  date: string
+  status?: "pending" | "done" | "no-followup"
+}
+const MEMORY_CATEGORIES: MemoryCategory[] = ["Tentang Ciko", "Cara Kita Berinteraksi", "Pengalaman Bersama", "Topik Belum Selesai", "Referensi Bersama"]
 
-// 2. DAILY items
+const MOCK_MEMORIES: MemoryItem[] = [
+  {
+    id: "mem1",
+    category: "Tentang Ciko",
+    content: "Suka kopi hitam kalau pagi",
+    source: "Dari Ciko",
+    sourceMsg: "aku kalau pagi wajib kopi hitam sih",
+    date: "Kemarin",
+  },
+  {
+    id: "mem2",
+    category: "Topik Belum Selesai",
+    content: "Ujian biologi hari Jumat",
+    source: "Dari Ciko",
+    sourceMsg: "Bukan besok, ujiannya Jumat.",
+    date: "Baru saja",
+    status: "pending"
+  },
+  {
+    id: "mem3",
+    category: "Cara Kita Berinteraksi",
+    content: "Lebih suka ngobrol jujur dan sedikit jahil daripada basa-basi kaku",
+    source: "Observasi Sementara",
+    date: "Kemarin"
+  }
+]
+`;
+
+content = content.replace('/* ---- Ikon: satu keluarga stroke konsisten (lucide-style) ---------------- */', memoryTypes + '\n/* ---- Ikon: satu keluarga stroke konsisten (lucide-style) ---------------- */');
+
+// 2. DAILY
 const dailyMock = `const DAILY: Message[] = [
   {
     id: "m1",
@@ -31,10 +68,9 @@ const dailyMock = `const DAILY: Message[] = [
   { id: "m4", from: "ciko", text: "iya iya, bos.", status: "sent" },
   { id: "m5", from: "mita", text: "bukan bos, pacar.", status: "done" },
 ]`;
-
 content = content.replace(/const DAILY: Message\[\] = \[\s*\{[\s\S]*?\}\s*\]/m, dailyMock);
 
-// 3. Avatar crop layout
+// 3. Avatar crop
 const newAvatar = `}) {
   if (photo) {
     const c = crop ?? DEFAULT_CROP
@@ -86,15 +122,35 @@ const newPersistAppearance = `function applyAppearance() {
     }
     setAppearanceOpen(false)
   }`;
+content = content.replace(/function applyAppearance\(\) \{\n    setApplied\(editing\)\n    const success = persistAppearance\(editing\)\n    if \(\!success\) \{\n      alert\("Gambar terlalu besar untuk disimpan secara permanen di browser prototipe ini\. Tampilan hanya bertahan selama sesi ini\."\)\n    \}\n    setAppearanceOpen\(false\)\n  \}/, newPersistAppearance);
+// In case it wasn't replaced yet:
 content = content.replace(/function applyAppearance\(\) \{\n    setApplied\(editing\)\n    persistAppearance\(editing\)\n    setAppearanceOpen\(false\)\n  \}/, newPersistAppearance);
 
-// 6. Fix "Gambar yang kamu pilih dari komputer hanya bertahan selama sesi"
+
 content = content.replace(
   'Gambar yang kamu pilih dari komputer hanya bertahan selama sesi dan hilang saat reload.',
   'Prototipe akan mencoba menyimpan gambar dari komputer, tapi bisa gagal jika ukurannya terlalu besar.'
 );
 
-// 7. Fix Send Ciko logic
+// 6. States
+const stateCode = `
+  const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
+  const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
+  const [selMem, setSelMem] = useState<MemoryItem | null>(null)
+  const [editingMem, setEditingMem] = useState<MemoryItem | null>(null)
+  const [delMem, setDelMem] = useState<MemoryItem | null>(null)
+`;
+content = content.replace('const [draft, setDraft] = useState("")', 'const [draft, setDraft] = useState("")\n' + stateCode);
+
+// 7. Ignore function
+const ignoreCode = `
+  function toggleIgnore(index: number) {
+    setMessages((m) => m.map((msg, k) => k === index ? { ...msg, ignored: !msg.ignored } : msg))
+  }
+`;
+content = content.replace('/* ---- Kontrol demo: kondisi percakapan --------------------------------- */', ignoreCode + '\n  /* ---- Kontrol demo: kondisi percakapan --------------------------------- */');
+
+// 8. Send / Run / Reset logic
 const sendCode = `    const id1 = Date.now().toString()
     const id2 = (Date.now() + 1).toString()
     setMessages((m) => [
@@ -104,9 +160,9 @@ const sendCode = `    const id1 = Date.now().toString()
     ])
     setDraft("")
     beginResponse(setMessages, mitaIndex, nextBehavior)`;
-content = content.replace(/    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: draft\.trim\(\), status: "sent" \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)\n    setDraft\(""\)\n    beginResponse\(setMessages, mitaIndex, nextBehavior\)/, sendCode);
+content = content.replace(/    const id1 = Date\.now\(\)\.toString\(\)\n    const id2 = \(Date\.now\(\) \+ 1\)\.toString\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ id: id1, from: "ciko", text: draft\.trim\(\), status: "sent" \},\n      \{ id: id2, from: "mita", text: "", status: "waiting" \},\n    \]\)\n    setDraft\(""\)\n    beginResponse\(setMessages, mitaIndex, nextBehavior\)/, sendCode);
 
-// 8. Fix RunScenario logic
+
 const runScenarioCode = `function runScenario(kind: MitaStatus) {
     if (responding) return;
     clearTimers()
@@ -124,18 +180,10 @@ const runScenarioCode = `function runScenario(kind: MitaStatus) {
       },
       { id: id2, from: "mita", text: "", status: "waiting" },
     ])`;
+content = content.replace(/function runScenario\(kind: MitaStatus\) \{\n    clearTimers\(\)\n    const mitaIndex = messages\.length \+ 1\n    const reply = nextReply\(\)\n    const id1 = Date\.now\(\)\.toString\(\)\n    const id2 = \(Date\.now\(\) \+ 1\)\.toString\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{\n        id: id1,\n        from: "ciko",\n        text: "boleh cerita satu hal random soal kamu\?",\n        status: "sent",\n      \},\n      \{ id: id2, from: "mita", text: "", status: "waiting" \},\n    \]\)/, runScenarioCode);
+// backup in case not id yet
 content = content.replace(/function runScenario\(kind: MitaStatus\) \{\n    clearTimers\(\)\n    const mitaIndex = messages\.length \+ 1\n    const reply = nextReply\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{\n        from: "ciko",\n        text: "boleh cerita satu hal random soal kamu\?",\n        status: "sent",\n      \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)/, runScenarioCode);
 
-// 9. Fix addFailedCiko
-const addFailedCiko = `function addFailedCiko() {
-    setMessages((m) => [
-      ...m,
-      { id: Date.now().toString(), from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
-    ])
-  }`;
-content = content.replace(/function addFailedCiko\(\) \{\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: "kamu lagi sibuk ga malem ini\?", status: "failed" \},\n    \]\)\n  \}/, addFailedCiko);
-
-// 10. resetDemo
 const resetDemoCode = `function resetDemo() {
     clearTimers()
     setHarian(DAILY)
@@ -148,82 +196,21 @@ const resetDemoCode = `function resetDemo() {
 content = content.replace(/function resetDemo\(\) \{\n    clearTimers\(\)\n    setHarian\(DAILY\)\n    setPertama\(\[\]\)\n    setChatMode\("harian"\)\n    setNextBehavior\("normal"\)\n    replyIdx\.current = 0\n  \}/, resetDemoCode);
 
 
-// 11. Retry Response disabled
+// 9. Disable Retries
 content = content.replace(
   'className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline"',
   'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
 );
-
 content = content.replace(
   'className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline"',
   'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
 );
 
-// 12. Add Memory Code (Global level)
-const newMemoryCode = `
-type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
-type MemoryItem = {
-  id: string
-  category: MemoryCategory
-  content: string
-  source: "Dari Ciko" | "Observasi Sementara" | "Roleplay"
-  sourceMsg?: string
-  date: string
-  status?: "pending" | "done" | "no-followup"
-}
 
-const MEMORY_CATEGORIES: MemoryCategory[] = ["Tentang Ciko", "Cara Kita Berinteraksi", "Pengalaman Bersama", "Topik Belum Selesai", "Referensi Bersama"]
+// 10. Mita text whitespace
+content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/g, `          <div className="flex max-w-[74%] flex-col">\n            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`);
 
-const MOCK_MEMORIES: MemoryItem[] = [
-  {
-    id: "mem1",
-    category: "Tentang Ciko",
-    content: "Suka kopi hitam kalau pagi",
-    source: "Dari Ciko",
-    sourceMsg: "aku kalau pagi wajib kopi hitam sih",
-    date: "Kemarin",
-  },
-  {
-    id: "mem2",
-    category: "Topik Belum Selesai",
-    content: "Ujian biologi hari Jumat",
-    source: "Dari Ciko",
-    sourceMsg: "Bukan besok, ujiannya Jumat.",
-    date: "Baru saja",
-    status: "pending"
-  },
-  {
-    id: "mem3",
-    category: "Cara Kita Berinteraksi",
-    content: "Lebih suka ngobrol jujur dan sedikit jahil daripada basa-basi kaku",
-    source: "Observasi Sementara",
-    date: "Kemarin"
-  }
-]
-`;
-
-content = content.replace('/* ---- Personalisasi tampilan --------------------------------------------- */', newMemoryCode + '\n/* ---- Personalisasi tampilan --------------------------------------------- */');
-
-// 13. State variables inside App()
-const stateCode = `
-  const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
-  const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
-  const [selMem, setSelMem] = useState<MemoryItem | null>(null)
-  const [editingMem, setEditingMem] = useState<MemoryItem | null>(null)
-  const [delMem, setDelMem] = useState<MemoryItem | null>(null)
-`;
-
-content = content.replace('const [draft, setDraft] = useState("")', 'const [draft, setDraft] = useState("")\n' + stateCode);
-
-const ignoreCode = `
-  function toggleIgnore(index: number) {
-    setMessages((m) => m.map((msg, k) => k === index ? { ...msg, ignored: !msg.ignored } : msg))
-  }
-`;
-
-content = content.replace('/* ---- Kontrol demo: kondisi percakapan --------------------------------- */', ignoreCode + '\n  /* ---- Kontrol demo: kondisi percakapan --------------------------------- */');
-
-// 14. Fix Ciko bubble rendering
+// 11. Ciko render replace
 const renderCikoReplace = `// Ciko
     return (
       <div key={index} className="flex items-end justify-end gap-2.5 group">
@@ -269,9 +256,7 @@ const renderCikoReplace = `// Ciko
             size={28}
           />
           <button 
-            onClick={() => {
-              setMessages((m) => m.map((mItem, k) => k === index ? { ...mItem, ignored: !mItem.ignored } : mItem))
-            }}
+            onClick={() => toggleIgnore(index)}
             className="text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] p-1 rounded hover:bg-[var(--color-panel)]"
             title={msg.ignored ? "Ingat kembali pesan ini" : "Jangan ingat ini"}
           >
@@ -283,16 +268,8 @@ const renderCikoReplace = `// Ciko
 
 content = content.replace(/\/\/ Ciko\n    return \(\n      <div key={index}[\s\S]*?<\/div>\n    \)/, renderCikoReplace);
 
-const replaceMitaBubble = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble);
 
-const replaceMitaBubble2 = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble2);
-
-
-// 15. Fix the Memory UI correctly without breaking syntax
+// 12. Memory UI
 const memoryUI = `        ) : active === "Memory" ? (
           <div className="flex flex-1 flex-col overflow-hidden">
             <div className="shrink-0 px-8 pt-8 md:px-12">
@@ -464,4 +441,6 @@ const memoryUI = `        ) : active === "Memory" ? (
 
 content = content.replace(/        \) : \(\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">/, memoryUI + '\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">');
 
+
 fs.writeFileSync('src/App.tsx', content);
+

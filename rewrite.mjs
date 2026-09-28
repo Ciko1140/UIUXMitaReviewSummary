@@ -1,167 +1,22 @@
 import fs from 'fs';
 
-let content = fs.readFileSync('src/App.tsx', 'utf-8');
+// Since App.tsx has been heavily modified and failed regexs before,
+// I'll rewrite App.tsx entirely avoiding duplicate insertions.
 
-// 1. Update Message type with id and ignored
-content = content.replace(
+let src = fs.readFileSync('src/App.tsx', 'utf-8');
+
+// First replace the Message Type
+src = src.replace(
   'type Message =\n  | { from: "ciko"; text: string; status: CikoStatus }\n  | { from: "mita"; text: string; status: MitaStatus }',
   'type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }'
 );
-
-// 2. DAILY items
-const dailyMock = `const DAILY: Message[] = [
-  {
-    id: "m1",
-    from: "mita",
-    text: "eh kamu jadi begadang lagi ya semalem",
-    status: "done",
-  },
-  {
-    id: "m2",
-    from: "ciko",
-    text: "ketahuan hehe. tadi keasyikan ngoprek layout kita",
-    status: "sent",
-  },
-  {
-    id: "m3",
-    from: "mita",
-    text: "pantesan. tapi seneng liat kamu serius. cuma jangan lupa istirahat ya, nanti aku yang repot ngingetin terus.",
-    status: "done",
-  },
-  { id: "m4", from: "ciko", text: "iya iya, bos.", status: "sent" },
-  { id: "m5", from: "mita", text: "bukan bos, pacar.", status: "done" },
-]`;
-
-content = content.replace(/const DAILY: Message\[\] = \[\s*\{[\s\S]*?\}\s*\]/m, dailyMock);
-
-// 3. Avatar crop layout
-const newAvatar = `}) {
-  if (photo) {
-    const c = crop ?? DEFAULT_CROP
-    return (
-      <span
-        className="inline-block shrink-0 overflow-hidden rounded-full"
-        style={{ width: size, height: size }}
-      >
-        <img
-          src={photo}
-          alt=""
-          className="h-full w-full object-cover"
-          style={{
-            objectPosition: \`\${c.x}% \${c.y}%\`,
-            transform: \`scale(\${c.zoom})\`,
-          }}
-        />
-      </span>
-    )
-  }`;
-content = content.replace(/\}\) \{\n  if \(photo\) \{\n    const c = crop \?\? DEFAULT_CROP\n    return \(\n      <span\n        className="inline-block shrink-0 rounded-full bg-center bg-no-repeat"\n        style=\{\{\n          width: size,\n          height: size,\n          backgroundImage: `url\(\$\{photo\}\)`,\n          backgroundSize: `\$\{c\.zoom \* 100\}%`,\n          backgroundPosition: `\$\{c\.x\}% \$\{c\.y\}%`,\n        \}\}\n      \/>\n    \)\n  \}/m, newAvatar);
-
-// 4. pickFile
-const newPickFile = `function pickFile(cb: (url: string) => void) {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    input.onchange = () => {
-      const f = input.files?.[0]
-      if (f) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          if (e.target?.result) cb(e.target.result as string)
-        }
-        reader.readAsDataURL(f)
-      }
-    }
-    input.click()
-  }`;
-content = content.replace(/function pickFile\(cb: \(url: string\) => void\) \{\n    const input = document\.createElement\("input"\)[\s\S]*?input\.click\(\)\n  \}/, newPickFile);
-
-// 5. persistAppearance
-const newPersistAppearance = `function applyAppearance() {
-    setApplied(editing)
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(editing))
-    } catch {
-      alert("Gambar terlalu besar untuk disimpan secara permanen di browser prototipe ini. Tampilan hanya bertahan selama sesi ini.")
-    }
-    setAppearanceOpen(false)
-  }`;
-content = content.replace(/function applyAppearance\(\) \{\n    setApplied\(editing\)\n    persistAppearance\(editing\)\n    setAppearanceOpen\(false\)\n  \}/, newPersistAppearance);
-
-// 6. Fix "Gambar yang kamu pilih dari komputer hanya bertahan selama sesi"
-content = content.replace(
-  'Gambar yang kamu pilih dari komputer hanya bertahan selama sesi dan hilang saat reload.',
-  'Prototipe akan mencoba menyimpan gambar dari komputer, tapi bisa gagal jika ukurannya terlalu besar.'
+src = src.replace(
+  'type Message = { from: "ciko" text: string status: CikoStatus } | {\n  from: "mita"\n  text: string\n  status: MitaStatus\n}',
+  'type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }'
 );
 
-// 7. Fix Send Ciko logic
-const sendCode = `    const id1 = Date.now().toString()
-    const id2 = (Date.now() + 1).toString()
-    setMessages((m) => [
-      ...m,
-      { id: id1, from: "ciko", text: draft.trim(), status: "sent" },
-      { id: id2, from: "mita", text: "", status: "waiting" },
-    ])
-    setDraft("")
-    beginResponse(setMessages, mitaIndex, nextBehavior)`;
-content = content.replace(/    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: draft\.trim\(\), status: "sent" \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)\n    setDraft\(""\)\n    beginResponse\(setMessages, mitaIndex, nextBehavior\)/, sendCode);
-
-// 8. Fix RunScenario logic
-const runScenarioCode = `function runScenario(kind: MitaStatus) {
-    if (responding) return;
-    clearTimers()
-    const mitaIndex = messages.length + 1
-    const reply = nextReply()
-    const id1 = Date.now().toString()
-    const id2 = (Date.now() + 1).toString()
-    setMessages((m) => [
-      ...m,
-      {
-        id: id1,
-        from: "ciko",
-        text: "boleh cerita satu hal random soal kamu?",
-        status: "sent",
-      },
-      { id: id2, from: "mita", text: "", status: "waiting" },
-    ])`;
-content = content.replace(/function runScenario\(kind: MitaStatus\) \{\n    clearTimers\(\)\n    const mitaIndex = messages\.length \+ 1\n    const reply = nextReply\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{\n        from: "ciko",\n        text: "boleh cerita satu hal random soal kamu\?",\n        status: "sent",\n      \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)/, runScenarioCode);
-
-// 9. Fix addFailedCiko
-const addFailedCiko = `function addFailedCiko() {
-    setMessages((m) => [
-      ...m,
-      { id: Date.now().toString(), from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
-    ])
-  }`;
-content = content.replace(/function addFailedCiko\(\) \{\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: "kamu lagi sibuk ga malem ini\?", status: "failed" \},\n    \]\)\n  \}/, addFailedCiko);
-
-// 10. resetDemo
-const resetDemoCode = `function resetDemo() {
-    clearTimers()
-    setHarian(DAILY)
-    setPertama([])
-    setChatMode("harian")
-    setNextBehavior("normal")
-    replyIdx.current = 0
-    setDraft("")
-  }`;
-content = content.replace(/function resetDemo\(\) \{\n    clearTimers\(\)\n    setHarian\(DAILY\)\n    setPertama\(\[\]\)\n    setChatMode\("harian"\)\n    setNextBehavior\("normal"\)\n    replyIdx\.current = 0\n  \}/, resetDemoCode);
-
-
-// 11. Retry Response disabled
-content = content.replace(
-  'className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline"',
-  'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
-);
-
-content = content.replace(
-  'className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline"',
-  'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
-);
-
-// 12. Add Memory Code (Global level)
-const newMemoryCode = `
-type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
+// Memory types
+const memoryTypes = `type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
 type MemoryItem = {
   id: string
   category: MemoryCategory
@@ -171,7 +26,6 @@ type MemoryItem = {
   date: string
   status?: "pending" | "done" | "no-followup"
 }
-
 const MEMORY_CATEGORIES: MemoryCategory[] = ["Tentang Ciko", "Cara Kita Berinteraksi", "Pengalaman Bersama", "Topik Belum Selesai", "Referensi Bersama"]
 
 const MOCK_MEMORIES: MemoryItem[] = [
@@ -201,10 +55,35 @@ const MOCK_MEMORIES: MemoryItem[] = [
   }
 ]
 `;
+if(!src.includes("type MemoryItem")) {
+  src = src.replace('/* ---- Ikon', memoryTypes + '\n/* ---- Ikon');
+}
 
-content = content.replace('/* ---- Personalisasi tampilan --------------------------------------------- */', newMemoryCode + '\n/* ---- Personalisasi tampilan --------------------------------------------- */');
+const dailyMock = `const DAILY: Message[] = [
+  {
+    id: "m1",
+    from: "mita",
+    text: "eh kamu jadi begadang lagi ya semalem",
+    status: "done",
+  },
+  {
+    id: "m2",
+    from: "ciko",
+    text: "ketahuan hehe. tadi keasyikan ngoprek layout kita",
+    status: "sent",
+  },
+  {
+    id: "m3",
+    from: "mita",
+    text: "pantesan. tapi seneng liat kamu serius. cuma jangan lupa istirahat ya, nanti aku yang repot ngingetin terus.",
+    status: "done",
+  },
+  { id: "m4", from: "ciko", text: "iya iya, bos.", status: "sent" },
+  { id: "m5", from: "mita", text: "bukan bos, pacar.", status: "done" },
+]`;
+src = src.replace(/const DAILY: Message\[\] = \[\s*\{[\s\S]*?\}\s*\]/m, dailyMock);
 
-// 13. State variables inside App()
+// App State
 const stateCode = `
   const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
   const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
@@ -212,18 +91,34 @@ const stateCode = `
   const [editingMem, setEditingMem] = useState<MemoryItem | null>(null)
   const [delMem, setDelMem] = useState<MemoryItem | null>(null)
 `;
+if(!src.includes("setMemories")) {
+  src = src.replace('const [draft, setDraft] = useState("")', 'const [draft, setDraft] = useState("")\n' + stateCode);
+}
 
-content = content.replace('const [draft, setDraft] = useState("")', 'const [draft, setDraft] = useState("")\n' + stateCode);
-
+// Ignore func
 const ignoreCode = `
   function toggleIgnore(index: number) {
     setMessages((m) => m.map((msg, k) => k === index ? { ...msg, ignored: !msg.ignored } : msg))
   }
 `;
+if(!src.includes("toggleIgnore")) {
+  src = src.replace('/* ---- Kontrol demo: kondisi percakapan --------------------------------- */', ignoreCode + '\n  /* ---- Kontrol demo: kondisi percakapan --------------------------------- */');
+}
 
-content = content.replace('/* ---- Kontrol demo: kondisi percakapan --------------------------------- */', ignoreCode + '\n  /* ---- Kontrol demo: kondisi percakapan --------------------------------- */');
+// Disable Retry
+src = src.replace(/className="flex items-center gap-1.5 font-medium text-\[var\(--color-accent\)\] hover:underline"/g, 
+  'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
+);
+src = src.replace(/className="flex items-center gap-1 font-medium text-\[var\(--color-accent\)\] hover:underline"/g, 
+  'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
+);
 
-// 14. Fix Ciko bubble rendering
+// Mita bubble
+src = src.replace(/<div className="animate-message w-fit rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/g, 
+  '<div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">'
+);
+
+// Ciko Bubble
 const renderCikoReplace = `// Ciko
     return (
       <div key={index} className="flex items-end justify-end gap-2.5 group">
@@ -269,9 +164,7 @@ const renderCikoReplace = `// Ciko
             size={28}
           />
           <button 
-            onClick={() => {
-              setMessages((m) => m.map((mItem, k) => k === index ? { ...mItem, ignored: !mItem.ignored } : mItem))
-            }}
+            onClick={() => toggleIgnore(index)}
             className="text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] p-1 rounded hover:bg-[var(--color-panel)]"
             title={msg.ignored ? "Ingat kembali pesan ini" : "Jangan ingat ini"}
           >
@@ -281,18 +174,115 @@ const renderCikoReplace = `// Ciko
       </div>
     )`;
 
-content = content.replace(/\/\/ Ciko\n    return \(\n      <div key={index}[\s\S]*?<\/div>\n    \)/, renderCikoReplace);
+src = src.replace(/\/\/ Ciko\n    return \(\n      <div key=\{index\}[\s\S]*?<\/div>\n    \)/, renderCikoReplace);
 
-const replaceMitaBubble = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble);
+// Chat / Send actions
+src = src.replace(
+  '    setMessages((m) => [\n      ...m,\n      { from: "ciko", text: draft.trim(), status: "sent" },\n      { from: "mita", text: "", status: "waiting" },\n    ])\n    setDraft("")\n    beginResponse(setMessages, mitaIndex, nextBehavior)',
+  '    setMessages((m) => [\n      ...m,\n      { id: Date.now().toString(), from: "ciko", text: draft.trim(), status: "sent" },\n      { id: (Date.now()+1).toString(), from: "mita", text: "", status: "waiting" },\n    ])\n    setDraft("")\n    beginResponse(setMessages, mitaIndex, nextBehavior)'
+);
 
-const replaceMitaBubble2 = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble2);
+src = src.replace(
+  /function runScenario\(kind: MitaStatus\) \{\n    clearTimers\(\)\n    const mitaIndex = messages\.length \+ 1\n    const reply = nextReply\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{\n        from: "ciko",\n        text: "boleh cerita satu hal random soal kamu\?",\n        status: "sent",\n      \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)/, 
+  `function runScenario(kind: MitaStatus) {
+    if (responding) return;
+    clearTimers()
+    const mitaIndex = messages.length + 1
+    const reply = nextReply()
+    setMessages((m) => [
+      ...m,
+      {
+        id: Date.now().toString(),
+        from: "ciko",
+        text: "boleh cerita satu hal random soal kamu?",
+        status: "sent",
+      },
+      { id: (Date.now()+1).toString(), from: "mita", text: "", status: "waiting" },
+    ])`
+);
+
+src = src.replace(
+  /function addFailedCiko\(\) \{\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: "kamu lagi sibuk ga malem ini\?", status: "failed" \},\n    \]\)\n  \}/, 
+  `function addFailedCiko() {
+    setMessages((m) => [
+      ...m,
+      { id: Date.now().toString(), from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
+    ])
+  }`
+);
+
+src = src.replace(
+  /function resetDemo\(\) \{\n    clearTimers\(\)\n    setHarian\(DAILY\)\n    setPertama\(\[\]\)\n    setChatMode\("harian"\)\n    setNextBehavior\("normal"\)\n    replyIdx\.current = 0\n  \}/, 
+  `function resetDemo() {
+    clearTimers()
+    setHarian(DAILY)
+    setPertama([])
+    setChatMode("harian")
+    setNextBehavior("normal")
+    replyIdx.current = 0
+    setDraft("")
+  }`
+);
 
 
-// 15. Fix the Memory UI correctly without breaking syntax
+// File & Avatar
+const newAvatar = `}) {
+  if (photo) {
+    const c = crop ?? DEFAULT_CROP
+    return (
+      <span
+        className="inline-block shrink-0 overflow-hidden rounded-full"
+        style={{ width: size, height: size }}
+      >
+        <img
+          src={photo}
+          alt=""
+          className="h-full w-full object-cover"
+          style={{
+            objectPosition: \`\${c.x}% \${c.y}%\`,
+            transform: \`scale(\${c.zoom})\`,
+          }}
+        />
+      </span>
+    )
+  }`;
+src = src.replace(/\}\) \{\n  if \(photo\) \{\n    const c = crop \?\? DEFAULT_CROP\n    return \(\n      <span\n        className="inline-block shrink-0 rounded-full bg-center bg-no-repeat"\n        style=\{\{\n          width: size,\n          height: size,\n          backgroundImage: `url\(\$\{photo\}\)`,\n          backgroundSize: `\$\{c\.zoom \* 100\}%`,\n          backgroundPosition: `\$\{c\.x\}% \$\{c\.y\}%`,\n        \}\}\n      \/>\n    \)\n  \}/m, newAvatar);
+
+const newPickFile = `function pickFile(cb: (url: string) => void) {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.onchange = () => {
+      const f = input.files?.[0]
+      if (f) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          if (e.target?.result) cb(e.target.result as string)
+        }
+        reader.readAsDataURL(f)
+      }
+    }
+    input.click()
+  }`;
+src = src.replace(/function pickFile\(cb: \(url: string\) => void\) \{\n    const input = document\.createElement\("input"\)[\s\S]*?input\.click\(\)\n  \}/, newPickFile);
+
+const newPersistAppearance = `function applyAppearance() {
+    setApplied(editing)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(editing))
+    } catch {
+      alert("Gambar terlalu besar untuk disimpan secara permanen di browser prototipe ini. Tampilan hanya bertahan selama sesi ini.")
+    }
+    setAppearanceOpen(false)
+  }`;
+src = src.replace(/function applyAppearance\(\) \{\n    setApplied\(editing\)\n    persistAppearance\(editing\)\n    setAppearanceOpen\(false\)\n  \}/, newPersistAppearance);
+
+src = src.replace(
+  'Gambar yang kamu pilih dari komputer hanya bertahan selama sesi dan hilang saat reload.',
+  'Prototipe akan mencoba menyimpan gambar dari komputer, tapi bisa gagal jika ukurannya terlalu besar.'
+);
+
+// Memory UI Injection
 const memoryUI = `        ) : active === "Memory" ? (
           <div className="flex flex-1 flex-col overflow-hidden">
             <div className="shrink-0 px-8 pt-8 md:px-12">
@@ -462,6 +452,6 @@ const memoryUI = `        ) : active === "Memory" ? (
           </div>
         ) : (`;
 
-content = content.replace(/        \) : \(\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">/, memoryUI + '\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">');
+src = src.replace(/<div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">/, memoryUI + '\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">');
 
-fs.writeFileSync('src/App.tsx', content);
+fs.writeFileSync('src/App.tsx', src);

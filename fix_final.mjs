@@ -2,164 +2,37 @@ import fs from 'fs';
 
 let content = fs.readFileSync('src/App.tsx', 'utf-8');
 
-// 1. Update Message type with id and ignored
-content = content.replace(
-  'type Message =\n  | { from: "ciko"; text: string; status: CikoStatus }\n  | { from: "mita"; text: string; status: MitaStatus }',
-  'type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }'
-);
-
-// 2. DAILY items
-const dailyMock = `const DAILY: Message[] = [
-  {
-    id: "m1",
-    from: "mita",
-    text: "eh kamu jadi begadang lagi ya semalem",
-    status: "done",
-  },
-  {
-    id: "m2",
-    from: "ciko",
-    text: "ketahuan hehe. tadi keasyikan ngoprek layout kita",
-    status: "sent",
-  },
-  {
-    id: "m3",
-    from: "mita",
-    text: "pantesan. tapi seneng liat kamu serius. cuma jangan lupa istirahat ya, nanti aku yang repot ngingetin terus.",
-    status: "done",
-  },
-  { id: "m4", from: "ciko", text: "iya iya, bos.", status: "sent" },
-  { id: "m5", from: "mita", text: "bukan bos, pacar.", status: "done" },
-]`;
-
-content = content.replace(/const DAILY: Message\[\] = \[\s*\{[\s\S]*?\}\s*\]/m, dailyMock);
-
-// 3. Avatar crop layout
-const newAvatar = `}) {
-  if (photo) {
-    const c = crop ?? DEFAULT_CROP
-    return (
-      <span
-        className="inline-block shrink-0 overflow-hidden rounded-full"
-        style={{ width: size, height: size }}
-      >
-        <img
-          src={photo}
-          alt=""
-          className="h-full w-full object-cover"
-          style={{
-            objectPosition: \`\${c.x}% \${c.y}%\`,
-            transform: \`scale(\${c.zoom})\`,
-          }}
-        />
-      </span>
-    )
-  }`;
-content = content.replace(/\}\) \{\n  if \(photo\) \{\n    const c = crop \?\? DEFAULT_CROP\n    return \(\n      <span\n        className="inline-block shrink-0 rounded-full bg-center bg-no-repeat"\n        style=\{\{\n          width: size,\n          height: size,\n          backgroundImage: `url\(\$\{photo\}\)`,\n          backgroundSize: `\$\{c\.zoom \* 100\}%`,\n          backgroundPosition: `\$\{c\.x\}% \$\{c\.y\}%`,\n        \}\}\n      \/>\n    \)\n  \}/m, newAvatar);
-
-// 4. pickFile
-const newPickFile = `function pickFile(cb: (url: string) => void) {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    input.onchange = () => {
-      const f = input.files?.[0]
-      if (f) {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          if (e.target?.result) cb(e.target.result as string)
-        }
-        reader.readAsDataURL(f)
-      }
-    }
-    input.click()
-  }`;
-content = content.replace(/function pickFile\(cb: \(url: string\) => void\) \{\n    const input = document\.createElement\("input"\)[\s\S]*?input\.click\(\)\n  \}/, newPickFile);
-
-// 5. persistAppearance
-const newPersistAppearance = `function applyAppearance() {
-    setApplied(editing)
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(editing))
-    } catch {
-      alert("Gambar terlalu besar untuk disimpan secara permanen di browser prototipe ini. Tampilan hanya bertahan selama sesi ini.")
-    }
-    setAppearanceOpen(false)
-  }`;
-content = content.replace(/function applyAppearance\(\) \{\n    setApplied\(editing\)\n    persistAppearance\(editing\)\n    setAppearanceOpen\(false\)\n  \}/, newPersistAppearance);
-
-// 6. Fix "Gambar yang kamu pilih dari komputer hanya bertahan selama sesi"
-content = content.replace(
-  'Gambar yang kamu pilih dari komputer hanya bertahan selama sesi dan hilang saat reload.',
-  'Prototipe akan mencoba menyimpan gambar dari komputer, tapi bisa gagal jika ukurannya terlalu besar.'
-);
-
-// 7. Fix Send Ciko logic
-const sendCode = `    const id1 = Date.now().toString()
-    const id2 = (Date.now() + 1).toString()
-    setMessages((m) => [
-      ...m,
-      { id: id1, from: "ciko", text: draft.trim(), status: "sent" },
-      { id: id2, from: "mita", text: "", status: "waiting" },
-    ])
-    setDraft("")
-    beginResponse(setMessages, mitaIndex, nextBehavior)`;
-content = content.replace(/    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: draft\.trim\(\), status: "sent" \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)\n    setDraft\(""\)\n    beginResponse\(setMessages, mitaIndex, nextBehavior\)/, sendCode);
-
-// 8. Fix RunScenario logic
-const runScenarioCode = `function runScenario(kind: MitaStatus) {
-    if (responding) return;
-    clearTimers()
-    const mitaIndex = messages.length + 1
-    const reply = nextReply()
-    const id1 = Date.now().toString()
-    const id2 = (Date.now() + 1).toString()
-    setMessages((m) => [
-      ...m,
-      {
-        id: id1,
-        from: "ciko",
-        text: "boleh cerita satu hal random soal kamu?",
-        status: "sent",
-      },
-      { id: id2, from: "mita", text: "", status: "waiting" },
-    ])`;
-content = content.replace(/function runScenario\(kind: MitaStatus\) \{\n    clearTimers\(\)\n    const mitaIndex = messages\.length \+ 1\n    const reply = nextReply\(\)\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{\n        from: "ciko",\n        text: "boleh cerita satu hal random soal kamu\?",\n        status: "sent",\n      \},\n      \{ from: "mita", text: "", status: "waiting" \},\n    \]\)/, runScenarioCode);
-
-// 9. Fix addFailedCiko
-const addFailedCiko = `function addFailedCiko() {
-    setMessages((m) => [
-      ...m,
-      { id: Date.now().toString(), from: "ciko", text: "kamu lagi sibuk ga malem ini?", status: "failed" },
-    ])
-  }`;
-content = content.replace(/function addFailedCiko\(\) \{\n    setMessages\(\(m\) => \[\n      \.\.\.m,\n      \{ from: "ciko", text: "kamu lagi sibuk ga malem ini\?", status: "failed" \},\n    \]\)\n  \}/, addFailedCiko);
-
-// 10. resetDemo
-const resetDemoCode = `function resetDemo() {
-    clearTimers()
-    setHarian(DAILY)
-    setPertama([])
-    setChatMode("harian")
-    setNextBehavior("normal")
-    replyIdx.current = 0
-    setDraft("")
-  }`;
-content = content.replace(/function resetDemo\(\) \{\n    clearTimers\(\)\n    setHarian\(DAILY\)\n    setPertama\(\[\]\)\n    setChatMode\("harian"\)\n    setNextBehavior\("normal"\)\n    replyIdx\.current = 0\n  \}/, resetDemoCode);
-
-
-// 11. Retry Response disabled
+// Fix 1: retryResponse - disable when responding
 content = content.replace(
   'className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline"',
   'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
 );
 
+// Fix retryCikoSend - disable when responding
 content = content.replace(
-  'className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline"',
-  'disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
+  'onClick={() => retryCikoSend(index)}\n                className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline"',
+  'onClick={() => retryCikoSend(index)}\n                disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"'
 );
 
-// 12. Add Memory Code (Global level)
+// Fix 2: runScenario disable when responding
+content = content.replace(
+  'function runScenario(kind: MitaStatus) {',
+  'function runScenario(kind: MitaStatus) {\n    if (responding) return;'
+);
+
+// Fix 3: resetDemo clear draft
+content = content.replace(
+  'setNextBehavior("normal")\n    replyIdx.current = 0',
+  'setNextBehavior("normal")\n    replyIdx.current = 0\n    setDraft("")'
+);
+
+// Fix 4: Appearance description text
+content = content.replace(
+  'Gambar yang kamu pilih dari komputer hanya bertahan selama sesi dan hilang saat reload.',
+  'Prototipe akan mencoba menyimpan gambar dari komputer, tapi bisa gagal jika ukurannya terlalu besar.'
+);
+
+// Fix 5 & 6: Memory Editor Implementation & Jangan ingat ini
 const newMemoryCode = `
 type MemoryCategory = "Tentang Ciko" | "Cara Kita Berinteraksi" | "Pengalaman Bersama" | "Topik Belum Selesai" | "Referensi Bersama"
 type MemoryItem = {
@@ -204,7 +77,6 @@ const MOCK_MEMORIES: MemoryItem[] = [
 
 content = content.replace('/* ---- Personalisasi tampilan --------------------------------------------- */', newMemoryCode + '\n/* ---- Personalisasi tampilan --------------------------------------------- */');
 
-// 13. State variables inside App()
 const stateCode = `
   const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
   const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
@@ -223,7 +95,6 @@ const ignoreCode = `
 
 content = content.replace('/* ---- Kontrol demo: kondisi percakapan --------------------------------- */', ignoreCode + '\n  /* ---- Kontrol demo: kondisi percakapan --------------------------------- */');
 
-// 14. Fix Ciko bubble rendering
 const renderCikoReplace = `// Ciko
     return (
       <div key={index} className="flex items-end justify-end gap-2.5 group">
@@ -260,7 +131,7 @@ const renderCikoReplace = `// Ciko
             </span>
           )}
         </div>
-        <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex flex-col items-center gap-1">
           <Avatar
             photo={applied.ciko}
             crop={applied.cikoCrop}
@@ -269,10 +140,8 @@ const renderCikoReplace = `// Ciko
             size={28}
           />
           <button 
-            onClick={() => {
-              setMessages((m) => m.map((mItem, k) => k === index ? { ...mItem, ignored: !mItem.ignored } : mItem))
-            }}
-            className="text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] p-1 rounded hover:bg-[var(--color-panel)]"
+            onClick={() => toggleIgnore(index)}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-ink-dim)] hover:text-[var(--color-ink)] p-1 rounded hover:bg-[var(--color-panel)]"
             title={msg.ignored ? "Ingat kembali pesan ini" : "Jangan ingat ini"}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
@@ -283,17 +152,7 @@ const renderCikoReplace = `// Ciko
 
 content = content.replace(/\/\/ Ciko\n    return \(\n      <div key={index}[\s\S]*?<\/div>\n    \)/, renderCikoReplace);
 
-const replaceMitaBubble = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble);
-
-const replaceMitaBubble2 = `          <div className="flex max-w-[74%] flex-col">
-            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-[4px_14px_14px_14px] bg-[var(--color-panel)] px-4 py-3 text-[16px] leading-6 text-[var(--color-ink)]">`;
-content = content.replace(/          <div className="flex max-w-\[74%\] flex-col">\n            <div className="animate-message w-fit whitespace-pre-wrap break-words rounded-\[4px_14px_14px_14px\] bg-\[var\(--color-panel\)\] px-4 py-3 text-\[16px\] leading-6 text-\[var\(--color-ink\)\]">/, replaceMitaBubble2);
-
-
-// 15. Fix the Memory UI correctly without breaking syntax
-const memoryUI = `        ) : active === "Memory" ? (
+const memoryUITemplate = `
           <div className="flex flex-1 flex-col overflow-hidden">
             <div className="shrink-0 px-8 pt-8 md:px-12">
               <h2 className="text-[24px] font-semibold tracking-[-0.02em]">Yang Mita ingat</h2>
@@ -460,8 +319,10 @@ const memoryUI = `        ) : active === "Memory" ? (
               )}
             </div>
           </div>
-        ) : (`;
+`;
 
-content = content.replace(/        \) : \(\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">/, memoryUI + '\n          <div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">');
+content = content.replace(/<div className="flex flex-1 items-start justify-center overflow-y-auto p-8 md:p-12">[\s\S]*?<\/div>\n        \)}/, (match) => {
+  return `{active === "Memory" ? (\n${memoryUITemplate}\n        ) : (\n${match}\n        )}`;
+});
 
 fs.writeFileSync('src/App.tsx', content);

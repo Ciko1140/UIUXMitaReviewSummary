@@ -11,6 +11,8 @@ type CikoStatus = "sent" | "sending" | "failed"
 type MitaStatus = "waiting" | "streaming" | "done" | "stopped" | "failed"
 type Message = { id: string; from: "ciko" | "mita"; text: string; status: CikoStatus | MitaStatus; ignored?: boolean }
 
+
+
 /* ---- Ikon: satu keluarga stroke konsisten (lucide-style) ---------------- */
 function Icon({
   name,
@@ -333,6 +335,7 @@ export default function App() {
   const [modelOpen, setModelOpen] = useState(false)
   const [modelNote, setModelNote] = useState(false)
   const [draft, setDraft] = useState("")
+  
 
   const [memories, setMemories] = useState<MemoryItem[]>(MOCK_MEMORIES)
   const [memTab, setMemTab] = useState<MemoryCategory>("Tentang Ciko")
@@ -482,20 +485,12 @@ export default function App() {
     beginResponse(setMessages, mitaIndex, nextBehavior)
   }
 
-  
-  function toggleIgnore(index: number) {
-    setMessages(m => m.map((msg, k) => {
-      if (k === index) {
-        return { ...msg, ignored: !msg.ignored }
-      }
-      return msg;
-    }))
-    // Simulasi menghapus memory jika ciko bilang besok ujian dll
-    if (index === 1) { // just a mock logic for demo
-       setMemories(m => m.filter(x => x.id !== 'mem1'))
-    }
-  }
 
+
+  function toggleIgnore(index: number) {
+    setMessages((m) => m.map((msg, k) => k === index ? { ...msg, ignored: !msg.ignored } : msg))
+  }
+  
   /* ---- Kontrol demo: kondisi percakapan --------------------------------- */
   function runScenario(kind: MitaStatus) {
     clearTimers()
@@ -550,6 +545,7 @@ export default function App() {
     setChatMode("harian")
     setNextBehavior("normal")
     replyIdx.current = 0
+    setDraft("")
   }
 
   /* ---- Model ------------------------------------------------------------ */
@@ -655,7 +651,7 @@ export default function App() {
               {label}
               <button
                 onClick={() => retryResponse(index)}
-                className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline"
+                disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1.5 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="retry" size={14} /> Coba lagi
               </button>
@@ -707,7 +703,7 @@ export default function App() {
               Gagal terkirim
               <button
                 onClick={() => retryCikoSend(index)}
-                className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline"
+                disabled={responding} title={responding ? "Tunggu respons saat ini selesai" : ""} className="flex items-center gap-1 font-medium text-[var(--color-accent)] hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Icon name="retry" size={13} /> Coba lagi
               </button>
